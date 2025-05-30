@@ -2,7 +2,7 @@ name: Send AAC Outcomes Email
 
 on:
   schedule:
-    - cron: '20 17 * * *'  # Runs at 7:00 AM CST (12:00 UTC)
+    - cron: '40 17 * * *'  # Runs at 7:00 AM CST (12:00 UTC)
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests pandas
 
       - name: Run script
         env:
