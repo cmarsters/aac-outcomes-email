@@ -1,0 +1,27 @@
+name: Send AAC Outcomes Email
+
+on:
+  schedule:
+    - cron: '0 13 * * *'  # Runs at 7:00 AM CST (13:00 UTC)
+  workflow_dispatch:
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        env:
+          AAC_GMAIL: ${{ secrets.AAC_GMAIL }}
+          AAC_GMAIL_PW: ${{ secrets.AAC_GMAIL_PW }}
+        run: python AACOutcomesEmailGenerator.py
