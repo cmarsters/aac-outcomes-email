@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 import requests
 import pandas as pd
@@ -201,9 +202,13 @@ else:
 # Email configuration
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
-EMAIL_ADDRESS = 'celenamarsters@gmail.com'
-EMAIL_PASSWORD = 'reyk niwa uyil wbzp'
+EMAIL_ADDRESS = os.getenv('AAC_GMAIL')
+EMAIL_PASSWORD = os.getenv('AAC_GMAIL_PW')
 RECIPIENT_EMAIL = 'celenamarsters@gmail.com, ' #smagoo22@hotmail.com'
+
+if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
+    raise ValueError("Missing email credentials — check environment variables.")
+
 
 # Compose the email
 subject = f"Austin Animal Center Outcomes for {yesterday}" ###########
