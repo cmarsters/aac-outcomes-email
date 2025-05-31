@@ -21,8 +21,21 @@ params = {
 response = requests.get(API_ENDPOINT, params=params)
 data = response.json()
 df = pd.DataFrame(data) # this df contains all outcomes data from the prev. day
-
 # print(df.head())
+
+# Desired columns to ensure are present:
+expected_columns = [
+    'outcome_status', 'type', 'name', 'animal_id',
+    'primary_breed', 'age_years', 'age_months', 'age_weeks',
+    'euthanasia_reason'
+]
+
+# Add any missing columns as empty strings
+for col in expected_columns:
+    if col not in df.columns:
+        df[col] = ''
+
+# print(df.columns)
 
 ## Verify and organize data:
 if not df.empty and 'outcome_status' in df.columns:
@@ -204,7 +217,7 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('AAC_GMAIL')
 EMAIL_PASSWORD = os.getenv('AAC_GMAIL_PW')
-RECIPIENT_EMAIL = 'celenamarsters@gmail.com, ' #smagoo22@hotmail.com'
+RECIPIENT_EMAIL = 'celenamarsters@gmail.com, smagoo22@hotmail.com'
 
 if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
     raise ValueError("Missing email credentials — check environment variables.")
