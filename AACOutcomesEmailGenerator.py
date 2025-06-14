@@ -218,6 +218,7 @@ if not df.empty and 'outcome_status' in df.columns:
 
 else:
     html_body = f"No outcome records were found for {yesterday.date()}."
+    print(f"No outcome records were found for {yesterday.date()}.")
 
 
 ## Create and send outcomes email:
