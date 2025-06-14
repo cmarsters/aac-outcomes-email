@@ -26,7 +26,7 @@ df = pd.DataFrame(data) # this df contains all outcomes data from the prev. day
 # Desired columns to ensure are present:
 expected_columns = [
     'outcome_status', 'type', 'name', 'animal_id',
-    'primary_breed', 'age_years', 'age_months', 'age_weeks',
+    'primary_breed', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks',
     'euthanasia_reason'
 ]
 
@@ -34,6 +34,13 @@ expected_columns = [
 for col in expected_columns:
     if col not in df.columns:
         df[col] = ''
+
+# Unify 'adopted altered'/'adopted unaltered'/'adopted' outcomes:
+df['outcome_status'] = df['outcome_status'].str.lower().replace({
+    'adopted altered': 'adopted',
+    'adopted unaltered': 'adopted'
+}).str.capitalize()
+
 
 # print(df.columns)
 
@@ -76,7 +83,7 @@ if not df.empty and 'outcome_status' in df.columns:
     other_df['age'] = other_df.apply(format_age, axis=1)
 
     # Trim down to columns of interest:
-    columns = ['outcome_status', 'type', 'name', 'animal_id', 'primary_breed', 'age', 'euthanasia_reason']
+    columns = ['outcome_status', 'type', 'name', 'animal_id', 'primary_breed', 'age', 'days_in_shelter', 'euthanasia_reason']
 
     dog_df = dog_df[columns]
     cat_df = cat_df[columns]
@@ -89,7 +96,8 @@ if not df.empty and 'outcome_status' in df.columns:
     'name':'Name',
     'animal_id':'ID',
     'primary_breed':'Primary Breed',
-    'age':'Age',
+    'age':'Age',    
+    'days_in_shelter':'Days in Shelter',
     'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
 
     cat_df.rename(columns={
@@ -99,6 +107,7 @@ if not df.empty and 'outcome_status' in df.columns:
     'animal_id':'ID',
     'primary_breed':'Primary Breed',
     'age':'Age',
+    'days_in_shelter':'Days in Shelter',
     'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
 
     other_df.rename(columns={
@@ -108,6 +117,7 @@ if not df.empty and 'outcome_status' in df.columns:
     'animal_id':'ID',
     'primary_breed':'Primary Breed',
     'age':'Age',
+    'days_in_shelter':'Days in Shelter',
     'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
 
     # Sort by outcome status:
