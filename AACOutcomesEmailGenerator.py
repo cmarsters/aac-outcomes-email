@@ -38,7 +38,9 @@ for col in expected_columns:
 # Unify 'adopted altered'/'adopted unaltered'/'adopted' outcomes:
 df['outcome_status'] = df['outcome_status'].str.lower().replace({
     'adopted altered': 'adopted',
-    'adopted unaltered': 'adopted'
+    'adopted unaltered': 'adopted',
+    'adopted offsite(altered)': 'adopted offsite',
+    'adopted offsite(unaltered)': 'adopted offsite'
 }).str.capitalize()
 
 
