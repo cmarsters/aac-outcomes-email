@@ -237,10 +237,26 @@ if not df.empty and 'outcome_status' in df.columns:
     # Add a 'Total' column
     summary_df['Total'] = summary_df.sum(axis=1)
 
+    # Move 'Returned to AAC' to bottom, if present
+    if 'Returned to AAC' in summary_df.index:
+        returned_row = summary_df.loc[['Returned to AAC']]
+        summary_df = summary_df.drop(index='Returned to AAC')
+        summary_df = pd.concat([summary_df, returned_row])
+    
     # Convert to HTML
-    summary_df.index.name = None  # Prevents "Outcome" row in HTML table
+    summary_df.index.name = None
     species_summary_html = summary_df.to_html(border=1, justify='center')
-
+    
+    # Highlight 'Returned to AAC' in red
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(species_summary_html, "html.parser")
+    
+    for row in soup.find_all("tr"):
+        th = row.find("th")
+        if th and th.text.strip().lower() == "returned to aac":
+            row['style'] = "background-color: #f8d7da;"  # light red background
+    
+    species_summary_html = str(soup)
 
     # Create detailed sections for each species:
     dog_html = dog_df.to_html(index=False, border=1, justify='center')
