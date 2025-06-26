@@ -6,154 +6,235 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
 
-## Get yesterday's date
-yesterday = datetime.now() - timedelta(days=1)
-start_of_day = yesterday.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-end_of_day = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+############################### FUNCTIONS ######################################
+def getdates(tminus:int):
+    # get yesterday's date:
+    yesterday = datetime.now() - timedelta(days=tminus) # tminus = 1 --> yesterday
+    start_of_day = yesterday.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    end_of_day = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
 
-## Pull outcome data from database
-API_ENDPOINT = "https://data.austintexas.gov/resource/gsvs-ypi7.json"
-params = {
-    "$where": f"outcome_date between '{start_of_day}' and '{end_of_day}'",
-    "$limit": 5000
-}
+    # Get 30 days from yesterday (AAC return window):
+    thirty_days_prior = yesterday - timedelta(days=30)
+    start_of_30daysprior = thirty_days_prior.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
-response = requests.get(API_ENDPOINT, params=params)
-data = response.json()
-df = pd.DataFrame(data) # this df contains all outcomes data from the prev. day
-# print(df.head())
-
-# Desired columns to ensure are present:
-expected_columns = [
-    'outcome_status', 'type', 'name', 'animal_id',
-    'primary_breed', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks',
-    'euthanasia_reason'
-]
-
-# Add any missing columns as empty strings
-for col in expected_columns:
-    if col not in df.columns:
-        df[col] = ''
-
-# Unify 'adopted altered'/'adopted unaltered'/'adopted' outcomes:
-df['outcome_status'] = df['outcome_status'].str.lower().replace({
-    'adopted altered': 'adopted',
-    'adopted unaltered': 'adopted',
-    'adopted offsite(altered)': 'adopted offsite',
-    'adopted offsite(unaltered)': 'adopted offsite'
-}).str.capitalize()
+    return yesterday, start_of_day, end_of_day, start_of_30daysprior
 
 
-# print(df.columns)
+def getOutcomes(start_datetime, end_datetime):
 
-## Verify and organize data:
-if not df.empty and 'outcome_status' in df.columns:
-    # outcome_summary = df['outcome_status'].value_counts()
+    # pull outcome data from database:
+    OUTCOMES_API = "https://data.austintexas.gov/resource/gsvs-ypi7.json"
+    params = { # yesterday's outcome data
+        "$where": f"outcome_date between '{start_datetime}' and '{end_datetime}'",
+        "$limit": 5000
+    }
+    response = requests.get(OUTCOMES_API, params=params)
+    data = response.json()
+    df = pd.DataFrame(data) # this df contains all outcomes data
 
-    # Filter for dogs and puppies
-    dog_df = df[df['type'].str.lower().isin(['dog', 'puppy'])].copy()
+    # Desired columns to ensure are present:
+    expected_columns = [
+        'outcome_status', 'type', 'name', 'animal_id',
+        'primary_breed', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks','euthanasia_reason'
+    ]
 
-    # Filter for cats and kittens
-    cat_df = df[df['type'].str.lower().isin(['cat', 'kitten'])].copy()
+    # Add any missing columns as empty strings
+    for col in expected_columns:
+        if col not in df.columns:
+            df[col] = ''
 
-    # Filter for all other species
-    df['type_clean'] = df['type'].str.lower().fillna('') # lowercase type col.
-    excluded_types = ['dog', 'puppy', 'cat', 'kitten']
-    other_df = df[~df['type_clean'].isin(excluded_types)].copy()
-    other_df.drop(columns='type_clean', inplace=True)
+    # Unify 'adopted altered'/'adopted unaltered'/'adopted' outcomes:
+    df['outcome_status'] = df['outcome_status'].str.lower().replace({
+        'adopted altered': 'adopted',
+        'adopted unaltered': 'adopted',
+        'adopted offsite(altered)': 'adopted offsite',
+        'adopted offsite(unaltered)': 'adopted offsite'
+    }).str.capitalize()
 
+    return df
+
+
+def format_age(row):
+    try:
+        y = int(pd.to_numeric(row.get('age_years'), errors='coerce') or 0)
+        m = int(pd.to_numeric(row.get('age_months'), errors='coerce') or 0)
+        w = int(pd.to_numeric(row.get('age_weeks'), errors='coerce') or 0)
+    except Exception:
+        y = m = w = 0
+
+    parts = []
+    if y: parts.append(f"{y}y")
+    if m: parts.append(f"{m}m")
+    if w and not y and not m:
+        parts.append(f"{w}w")
+    return ' '.join(parts) if parts else "Unknown"
+
+
+def formatSpeciesDF(df):
+    df = df.copy()  # prevents SettingWithCopyWarning
 
     # Create a readable age column
-    def format_age(row):
-        try:
-            y = int(pd.to_numeric(row.get('age_years'), errors='coerce') or 0)
-            m = int(pd.to_numeric(row.get('age_months'), errors='coerce') or 0)
-            w = int(pd.to_numeric(row.get('age_weeks'), errors='coerce') or 0)
-        except Exception:
-            y = m = w = 0
-
-        parts = []
-        if y: parts.append(f"{y}y")
-        if m: parts.append(f"{m}m")
-        if w and not y and not m:
-            parts.append(f"{w}w")
-        return ' '.join(parts) if parts else "Unknown"
-
-
-    dog_df['age'] = dog_df.apply(format_age, axis=1)
-    cat_df['age'] = cat_df.apply(format_age, axis=1)
-    other_df['age'] = other_df.apply(format_age, axis=1)
+    df['age'] = df.apply(format_age, axis=1)
 
     # Trim down to columns of interest:
     columns = ['outcome_status', 'type', 'name', 'animal_id', 'primary_breed', 'age', 'days_in_shelter', 'euthanasia_reason']
-
-    dog_df = dog_df[columns]
-    cat_df = cat_df[columns]
-    other_df = other_df[columns]
+    df = df[columns]
 
     # Rename columns so html output is more readable:
-    dog_df.rename(columns={
-    'outcome_status': 'Outcome',
-    'type': 'Species',
-    'name':'Name',
-    'animal_id':'ID',
-    'primary_breed':'Primary Breed',
-    'age':'Age',    
-    'days_in_shelter':'Days in Shelter',
-    'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
+    df.rename(columns={
+        'outcome_status': 'Outcome',
+        'type': 'Species',
+        'name':'Name',
+        'animal_id':'ID',
+        'primary_breed':'Primary Breed',
+        'age':'Age',
+        'days_in_shelter':'Days in Shelter',
+        'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
 
-    cat_df.rename(columns={
-    'outcome_status': 'Outcome',
-    'type': 'Species',
-    'name':'Name',
-    'animal_id':'ID',
-    'primary_breed':'Primary Breed',
-    'age':'Age',
-    'days_in_shelter':'Days in Shelter',
-    'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
-
-    other_df.rename(columns={
-    'outcome_status': 'Outcome',
-    'type': 'Species',
-    'name':'Name',
-    'animal_id':'ID',
-    'primary_breed':'Primary Breed',
-    'age':'Age',
-    'days_in_shelter':'Days in Shelter',
-    'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
-
-    # Sort by outcome status:
-    dog_df = dog_df.sort_values(by='Outcome')
-    cat_df = cat_df.sort_values(by='Outcome')
-    other_df = other_df.sort_values(by='Outcome')
 
     # Replace NaNs with empty strings:
-    dog_df = dog_df.fillna('')
-    cat_df = cat_df.fillna('')
-    other_df = other_df.fillna('')
+    df = df.fillna('')
+    
+    # Custom outcome order: everything except "Returned", which goes last
+    outcomes_present = df['Outcome'].unique().tolist()
+    outcome_order = sorted([o for o in outcomes_present if o != 'Returned to AAC']) + ['Returned to AAC']
+
+    # Only apply categorical if Outcome is not empty
+    if df['Outcome'].ne('').any():
+        df['Outcome'] = pd.Categorical(df['Outcome'], categories=outcome_order, ordered=True)
+    df = df.sort_values(by='Outcome')
+
+    return df
+
+def highlight_returns_in_html(html_str):
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html_str, "html.parser")
+
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if cells and cells[0].text.strip().lower() == "returned to aac":
+            row['style'] = "background-color: #f8d7da;"  # light red
+
+    return str(soup)
+
+################################################################################
+################################################################################
+################################################################################
+
+
+
+## Get relevant dates/times
+yesterday, start_of_day, end_of_day, start_30d = getdates(tminus=1)
+
+
+## Pull outcome data from database
+df = getOutcomes(start_of_day, end_of_day)
+outcomes_30d = getOutcomes(start_30d, end_of_day)
+
+## Filter outcomes_30d to adopted dogs only
+df_30 = outcomes_30d[
+    (outcomes_30d['outcome_status'].str.lower().str.contains('adopted'))
+].copy()
+
+# for dogs who have been adopted and returned more than once,
+# keep only most recent adoption:
+df_30 = (
+    df_30.sort_values(by='outcome_date', ascending=False)
+    .drop_duplicates(subset='animal_id', keep='first')
+)
+
+## Look for adoption returns
+# Look in intake data for pets returned yesterday
+INTAKE_API = "https://data.austintexas.gov/resource/pyqf-r2dc.json"
+intake_params = {
+    "$where": f"source_date between '{start_of_day}' and '{end_of_day}'",
+    "$limit": 5000
+}
+intake_data = requests.get(INTAKE_API, params=intake_params).json()
+intake_df = pd.DataFrame(intake_data)
+
+# Desired columns to ensure are present:
+expected_columns = [
+    'source_date', 'animal_id', 'type', 'source_name',
+    'name_at_intake', 'ispreviouslyspayedneutered', 'sex', 'primary_breed',
+    'primary_color', 'secondary_color', 'intake_health_condition'
+]
+
+
+# Add any missing columns as empty strings
+for col in expected_columns:
+    if col not in intake_df.columns:
+        intake_df[col] = ''
+
+# Rename columns so html output is more readable:
+intake_df.rename(columns={
+'source_date': 'intake_date',
+'source_name': 'intake_status'}, inplace=True)
+
+# Filter for dog returns
+returns_df = intake_df[
+    (intake_df.get('intake_status', '').str.lower() == 'returns')
+].copy()
+
+
+# Convert dates
+returns_df['intake_date'] = pd.to_datetime(returns_df['intake_date'])
+df_30['outcome_date'] = pd.to_datetime(df_30['outcome_date'])
+
+
+
+# Merge to get original name from outcomes
+returns_df = returns_df.merge(
+    df_30[['animal_id', 'name', 'outcome_date', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks', 'euthanasia_reason']],
+    how='left',
+    on='animal_id',
+    suffixes=('prev_', '')
+)
+
+
+# Integrate "Returns" as an outcome type
+returns_df['outcome_status'] = 'Returned to AAC'
+returns_df['days_in_shelter'] = ''
+returns_df['age'] = returns_df.apply(format_age, axis=1)
+
+if not returns_df.empty:
+    df_withReturns = pd.concat([df, returns_df], ignore_index=True)
+    df_withReturns.fillna('', inplace=True)
+else:
+    df_withReturns = df
+
+## Verify and organize outcome data:
+if not df.empty and 'outcome_status' in df.columns:
+
+    # Filter for dogs and puppies
+    dog_df = df_withReturns[df_withReturns['type'].str.lower().isin(['dog', 'puppy'])].copy()
+
+    # Filter for cats and kittens
+    cat_df = df_withReturns[df_withReturns['type'].str.lower().isin(['cat', 'kitten'])].copy()
+
+    # Filter for all other outcomes
+    df_withReturns['type_clean'] = df_withReturns['type'].str.lower().fillna('') # lowercase type col.
+    excluded_types = ['dog', 'puppy', 'cat', 'kitten']
+    other_df = df_withReturns[~df_withReturns['type_clean'].isin(excluded_types)].copy()
+    other_df.drop(columns='type_clean', inplace=True)
+
+    # Rename columns so html output is more readable:
+    dog_df, cat_df, other_df = formatSpeciesDF(dog_df), formatSpeciesDF(cat_df), formatSpeciesDF(other_df)
 
     # Create summary sections for each species:
-    # dog_outcome_summary = dog_df['Outcome'].value_counts()
-    # dog_summary_html = dog_outcome_summary.to_frame().to_html(header=False, border=0)
-    #
-    # cat_outcome_summary = cat_df['Outcome'].value_counts()
-    # cat_summary_html = cat_outcome_summary.to_frame().to_html(header=False, border=0)
-    #
-    # other_outcome_summary = other_df['Outcome'].value_counts()
-    # other_summary_html = other_outcome_summary.to_frame().to_html(header=False, border=0)
-
     dog_counts = dog_df['Outcome'].value_counts()
     cat_counts = cat_df['Outcome'].value_counts()
     other_counts = other_df['Outcome'].value_counts()
 
-    # Combine into one DataFrame
+    # Combine summaries for each species into one DataFrame
     summary_df = pd.DataFrame({
         'Dog/Puppy': dog_counts,
         'Cat/Kitten': cat_counts,
         'Other': other_counts
     }).fillna(0).astype(int)
 
-    # Optional: Add a 'Total' column
+    # Add a 'Total' column
     summary_df['Total'] = summary_df.sum(axis=1)
 
     # Convert to HTML
@@ -165,6 +246,11 @@ if not df.empty and 'outcome_status' in df.columns:
     dog_html = dog_df.to_html(index=False, border=1, justify='center')
     cat_html = cat_df.to_html(index=False, border=1, justify='center')
     other_html = other_df.to_html(index=False, border=1, justify='center')
+
+    dog_html = highlight_returns_in_html(dog_df.to_html(index=False, border=1, justify='center'))
+    cat_html = highlight_returns_in_html(cat_df.to_html(index=False, border=1, justify='center'))
+    other_html = highlight_returns_in_html(other_df.to_html(index=False, border=1, justify='center'))
+
 
     # Build the HTML email body
     html_body = f"""
