@@ -198,6 +198,10 @@ returns_df['outcome_status'] = 'Returned to AAC'
 returns_df['days_in_shelter'] = ''
 returns_df['age'] = returns_df.apply(format_age, axis=1)
 
+df['outcome_status'] = df['outcome_status'].replace({
+    'Doa': 'DOA'
+})
+
 if not returns_df.empty:
     df_withReturns = pd.concat([df, returns_df], ignore_index=True)
     df_withReturns.fillna('', inplace=True)
@@ -339,9 +343,6 @@ if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
 
 
 # Compose the email
-subject = f"Austin Animal Center Outcomes for {yesterday}" ###########
-
-
 msg = MIMEMultipart("alternative")
 msg['Subject'] = f"Austin Animal Center Outcomes for {yesterday.date()}"
 msg['From'] = EMAIL_ADDRESS
