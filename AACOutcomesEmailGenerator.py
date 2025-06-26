@@ -336,7 +336,7 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('AAC_GMAIL')
 EMAIL_PASSWORD = os.getenv('AAC_GMAIL_PW')
-RECIPIENT_EMAIL = 'celenamarsters@gmail.com, ' #aac-outcomes@googlegroups.com'
+RECIPIENT_EMAIL = 'celenamarsters@gmail.com, aac-outcomes@googlegroups.com'
 
 if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
     raise ValueError("Missing email credentials — check environment variables.")
