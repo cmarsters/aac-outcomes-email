@@ -35,7 +35,7 @@ def getOutcomes(start_datetime, end_datetime):
     # Desired columns to ensure are present:
     expected_columns = [
         'outcome_status', 'type', 'name', 'animal_id',
-        'primary_breed', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks','euthanasia_reason'
+        'primary_breed', 'days_in_shelter', 'date_of_birth','outcome_date','euthanasia_reason'
     ]
 
     # Add any missing columns as empty strings
@@ -54,20 +54,27 @@ def getOutcomes(start_datetime, end_datetime):
     return df
 
 
-def format_age(row):
-    try:
-        y = int(pd.to_numeric(row.get('age_years'), errors='coerce') or 0)
-        m = int(pd.to_numeric(row.get('age_months'), errors='coerce') or 0)
-        w = int(pd.to_numeric(row.get('age_weeks'), errors='coerce') or 0)
-    except Exception:
-        y = m = w = 0
+def format_age(row, decimals: int = 1, ref_col: str = 'outcome_date'):
+    """
+    Compute age (in years) from date_of_birth.
+    - Uses the row's outcome_date (or another ref_col) as the 'as of' date when present,
+      otherwise falls back to the current time.
+    - Returns a float rounded to `decimals`, or '' if we can't compute a valid age.
+    """
+    dob = pd.to_datetime(row.get('date_of_birth'), errors='coerce')
+    ref = pd.to_datetime(row.get(ref_col), errors='coerce')
 
-    parts = []
-    if y: parts.append(f"{y}y")
-    if m: parts.append(f"{m}m")
-    if w and not y and not m:
-        parts.append(f"{w}w")
-    return ' '.join(parts) if parts else "Unknown"
+    # Fall back to "now" if no reference date in the row
+    if pd.isna(ref):
+        ref = pd.Timestamp.now(tz=None)
+
+    # If no DOB or DOB is after reference date, leave blank
+    if pd.isna(dob) or dob > ref:
+        return ''
+
+    years = (ref - dob).days / 365.2425  # mean tropical year
+    return round(years, decimals)
+
 
 
 def formatSpeciesDF(df):
@@ -87,14 +94,14 @@ def formatSpeciesDF(df):
         'name':'Name',
         'animal_id':'ID',
         'primary_breed':'Primary Breed',
-        'age':'Age',
+        'age':'Age (Years)',
         'days_in_shelter':'Days in Shelter',
         'euthanasia_reason':'Euthanasia Reason'}, inplace=True)
 
 
     # Replace NaNs with empty strings:
     df = df.fillna('')
-    
+
     # Custom outcome order: everything except "Returned", which goes last
     outcomes_present = df['Outcome'].unique().tolist()
     outcome_order = sorted([o for o in outcomes_present if o != 'Returned to AAC']) + ['Returned to AAC']
@@ -186,7 +193,7 @@ df_30['outcome_date'] = pd.to_datetime(df_30['outcome_date'])
 
 # Merge to get original name from outcomes
 returns_df = returns_df.merge(
-    df_30[['animal_id', 'name', 'outcome_date', 'days_in_shelter', 'age_years', 'age_months', 'age_weeks', 'euthanasia_reason']],
+    df_30[['animal_id', 'name', 'outcome_date', 'days_in_shelter', 'date_of_birth', 'euthanasia_reason']],
     how='left',
     on='animal_id',
     suffixes=('prev_', '')
@@ -246,20 +253,20 @@ if not df.empty and 'outcome_status' in df.columns:
         returned_row = summary_df.loc[['Returned to AAC']]
         summary_df = summary_df.drop(index='Returned to AAC')
         summary_df = pd.concat([summary_df, returned_row])
-    
+
     # Convert to HTML
     summary_df.index.name = None
     species_summary_html = summary_df.to_html(border=1, justify='center')
-    
+
     # Highlight 'Returned to AAC' in red
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(species_summary_html, "html.parser")
-    
+
     for row in soup.find_all("tr"):
         th = row.find("th")
         if th and th.text.strip().lower() == "returned to aac":
             row['style'] = "background-color: #f8d7da;"  # light red background
-    
+
     species_summary_html = str(soup)
 
     # Create detailed sections for each species:
@@ -336,7 +343,7 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('AAC_GMAIL')
 EMAIL_PASSWORD = os.getenv('AAC_GMAIL_PW')
-RECIPIENT_EMAIL = 'celenamarsters@gmail.com, aac-outcomes@googlegroups.com'
+RECIPIENT_EMAIL = 'celenamarsters@gmail.com,' # aac-outcomes@googlegroups.com'
 
 if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
     raise ValueError("Missing email credentials — check environment variables.")
