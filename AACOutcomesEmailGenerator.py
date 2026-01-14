@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
 
-############################### FUNCTIONS ######################################
+############################### FUNCTIONS #####################################
 def getdates(tminus:int):
     # get yesterday's date:
     yesterday = datetime.now() - timedelta(days=tminus) # tminus = 1 --> yesterday
