@@ -211,7 +211,10 @@ df['outcome_status'] = df['outcome_status'].replace({
 
 if not returns_df.empty:
     df_withReturns = pd.concat([df, returns_df], ignore_index=True)
-    df_withReturns.fillna('', inplace=True)
+    # Fill string columns with empty string
+    for col in df_withReturns.select_dtypes(include='object').columns:
+        df_withReturns[col].fillna('', inplace=True)
+
 else:
     df_withReturns = df
 
