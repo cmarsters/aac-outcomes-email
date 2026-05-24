@@ -5,6 +5,23 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Create session with re-try logic 
+session = requests.Session()
+
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+
 
 ############################### FUNCTIONS #####################################
 def getdates(tminus:int):
@@ -28,8 +45,21 @@ def getOutcomes(start_datetime, end_datetime):
         "$where": f"outcome_date between '{start_datetime}' and '{end_datetime}'",
         "$limit": 5000
     }
-    response = requests.get(OUTCOMES_API, params=params)
-    data = response.json()
+
+    try:
+        response = session.get(
+            OUTCOMES_API,
+            params=params,
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        print("Successfully retrieved outcome data.")
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error retrieving outcome data: {e}")
+        return pd.DataFrame()
+    
     df = pd.DataFrame(data) # this df contains all outcomes data
 
     # Desired columns to ensure are present:
@@ -158,7 +188,21 @@ intake_params = {
     "$where": f"source_date between '{start_of_day}' and '{end_of_day}'",
     "$limit": 5000
 }
-intake_data = requests.get(INTAKE_API, params=intake_params).json()
+try:
+    intake_response = session.get(
+        INTAKE_API,
+        params=intake_params,
+        timeout=30
+    )
+
+    intake_response.raise_for_status()
+    intake_data = intake_response.json()
+    print("Successfully retrieved intake data.")
+
+except requests.exceptions.RequestException as e:
+    print(f"Error retrieving intake data: {e}")
+    intake_data = []
+    
 intake_df = pd.DataFrame(intake_data)
 
 # Desired columns to ensure are present:
