@@ -2,7 +2,7 @@ name: Send AAC Outcomes Email
 
 on:
   schedule:
-    - cron: '00 10 * * *'  # Runs at 5:00 AM CST (10:00 UTC)
+    - cron: '57 8 * * *'  # Runs at 3:57 AM CST (8:57 UTC)
   workflow_dispatch:
 
 jobs:
